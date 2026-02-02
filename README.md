@@ -39,6 +39,8 @@ This project was developed and tested on:
     ./spectrum
     ```
 
+if you push H key, hours will be shown. +/- increase/decrease font size. The setting is permanent even after restart.
+ 
 ---
 
 ## 🖥️ Recommended Setup (Dashboard Mode)
