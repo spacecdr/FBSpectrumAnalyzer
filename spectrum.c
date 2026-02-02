@@ -13,13 +13,12 @@
 #define PCM_DEVICE "default"
 #define SAMPLES 2048 
 
-// --- CONFIGURAZIONE MATRICE ---
 #define LED_SIZE 8      
 #define LED_GAP 2       
 #define MAX_HEIGHT_SCALE 50.0 
 
 int main() {
-    printf("\e[?25l"); // Nasconde il cursore
+    printf("\e[?25l"); 
     fflush(stdout);
 
     int fb_fd = open("/dev/fb0", O_RDWR);
@@ -33,7 +32,6 @@ int main() {
     long screensize = vinfo.yres_virtual * finfo.line_length;
     unsigned char *fbp = (unsigned char *)mmap(0, screensize, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
     
-    // CREAZIONE BACK BUFFER (Memoria RAM locale per evitare sfarfallio)
     unsigned char *back_buffer = (unsigned char *)malloc(screensize);
     if (!back_buffer) { perror("Errore allocazione buffer"); return 1; }
 
@@ -65,7 +63,6 @@ int main() {
 
         fftw_execute(p);
         
-        // Puliamo il Back Buffer, non lo schermo reale!
         memset(back_buffer, 0, screensize); 
 
         for (int i = 0; i < num_visible_bars && i < SAMPLES/2; i++) {
@@ -100,7 +97,6 @@ int main() {
                         int final_x = start_x + dx;
                         if (final_x >= vinfo.xres) continue;
 
-                        // Scriviamo nel Back Buffer
                         if (y_up + dy >= 0) {
                             long loc = (final_x * bpp) + ((y_up + dy) * finfo.line_length);
                             back_buffer[loc+0] = b; back_buffer[loc+1] = g; back_buffer[loc+2] = r;
@@ -114,10 +110,7 @@ int main() {
             }
         }
         
-        // COPIA FINALE: Spostiamo tutto il buffer sulla memoria video in un colpo solo
         memcpy(fbp, back_buffer, screensize);
-
-        // Limitiamo il refresh rate a circa 50-60 FPS per non stressare inutilmente la CPU
         usleep(16000); 
     }
 
