@@ -8,7 +8,7 @@ This is a "C" Spectrum Analyzer for Linux FrameBuffer
 My main goal, is to use it on older computers to let them working as Spectrum Analyzer and Airplay receiver. Thru Alsa, it is able to detect sounds from microphone or aux input, and show the audio spectrum.
 I installed a clean Debian 12 (in this screenshot, it's a Samsung N130, which has an Atom 32bit, then it's Debian X86), setting autologin on tty1, and a bash/Dialog panel just to connect WiFi (by NetworkManager "nmtui") and start the program (restarting ShairPort on launch)
 
-How to install:
+## Installation
 
 sudo apt install shairport-sync
 sudo apt install build-essential libasound2-dev libfftw3-dev
@@ -21,4 +21,9 @@ if you set autologin for your standard user, i suggest to get the dashboard.sh s
 
 ![alt text](screen.png)
 
-<video src="https://github.com/spacecdr/FBSpectrumAnalyzer/raw/refs/heads/main/video.mp4" width="300" />
+## Video
+
+<video controls="" width="800" height="500" muted="" loop="" autoplay="">
+<source src="https://github.com/spacecdr/FBSpectrumAnalyzer/raw/refs/heads/main/video.mp4" type="video/mp4">
+</video>
+
