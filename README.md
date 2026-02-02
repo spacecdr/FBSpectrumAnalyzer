@@ -1,3 +1,7 @@
+<p align="center">
+<b>Spectrum Analyzer for Linux FrameBuffer</b>
+</p> 
+
 ![alt text](fb.png)
 
 This is a "C" Spectrum Analyzer for Linux FrameBuffer
