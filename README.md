@@ -20,3 +20,5 @@ then execute ./spectrum
 if you set autologin for your standard user, i suggest to get the dashboard.sh script, and setting it executable by "chmod +x dashboard.sh", and run it by .bashrc at the end of the file by append "./dashboard.sh"
 
 ![alt text](screen.png)
+
+<video src="https://github.com/spacecdr/FBSpectrumAnalyzer/raw/refs/heads/main/video.mp4" width="300" />
