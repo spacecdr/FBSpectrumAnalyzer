@@ -23,5 +23,7 @@ if you set autologin for your standard user, i suggest to get the dashboard.sh s
 
 ## Video
 
-[![VIDEO](https://rawcdn.githack.com/spacecdr/FBSpectrumAnalyzer/refs/heads/main/screen.png)](https://rawcdn.githack.com/spacecdr/FBSpectrumAnalyzer/refs/heads/main/video.mp4)
+
+https://github.com/user-attachments/assets/6fcc3913-acc8-4869-be19-fabc4e5d5f10
+
 
