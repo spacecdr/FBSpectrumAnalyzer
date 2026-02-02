@@ -4,20 +4,59 @@
 
 ![alt text](fb.png)
 
-This is a "C" Spectrum Analyzer for Linux FrameBuffer
-My main goal, is to use it on older computers to let them working as Spectrum Analyzer and Airplay receiver. Thru Alsa, it is able to detect sounds from microphone or aux input, and show the audio spectrum.
-I installed a clean Debian 12 (in this screenshot, it's a Samsung N130, which has an Atom 32bit, then it's Debian X86), setting autologin on tty1, and a bash/Dialog panel just to connect WiFi (by NetworkManager "nmtui") and start the program (restarting ShairPort on launch)
+# 🎹 C Spectrum Analyzer for Linux FrameBuffer
 
-## Installation
+A lightweight spectrum analyzer written in **C**, specifically designed for the **Linux FrameBuffer**. This project is ideal for repurposing older hardware (like 32-bit Atom netbooks) into dedicated audio analysis stations and AirPlay receivers.
 
-sudo apt install shairport-sync
-sudo apt install build-essential libasound2-dev libfftw3-dev
+## 🚀 Features
+* **High Performance:** Written in C for minimal resource usage, perfect for legacy hardware.
+* **Versatile Input:** Uses **ALSA** to capture audio from microphones, AUX inputs, or internal loops.
+* **Standalone:** Runs directly from the TTY/FrameBuffer without requiring a GUI (X11/Wayland).
+* **AirPlay Integration:** Optimized to work alongside `shairport-sync`.
 
-gcc spectrum.c -o spectrum -lasound -lfftw3 -lm
+## 🛠️ System Requirements & Environment
+This project was developed and tested on:
+* **Hardware:** Samsung N130 (Intel Atom 32-bit).
+* **OS:** Debian 12 "Bookworm" (X86).
+* **Configuration:** Auto-login enabled on `tty1` for a seamless "appliance" experience.
 
-then execute ./spectrum
+## 📦 Installation & Compilation
 
-if you set autologin for your standard user, i suggest to get the dashboard.sh script, and setting it executable by "chmod +x dashboard.sh", and run it by .bashrc at the end of the file by append "./dashboard.sh"
+1.  **Install dependencies:**
+    ```bash
+    sudo apt update
+    sudo apt install shairport-sync build-essential libasound2-dev libfftw3-dev
+    ```
+
+2.  **Compile the source:**
+    Use `gcc` to link the ALSA, FFTW3, and Math libraries:
+    ```bash
+    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm
+    ```
+
+3.  **Run the analyzer:**
+    ```bash
+    ./spectrum
+    ```
+
+---
+
+## 🖥️ Recommended Setup (Dashboard Mode)
+To turn your computer into a dedicated audio device, you can use the provided `dashboard.sh` script. This script features a **Bash/Dialog** panel to manage WiFi connections (via `nmtui`) and launches the program while automatically restarting `shairport-sync`.
+
+### Set up Auto-launch
+1.  **Make the script executable:**
+    ```bash
+    chmod +x dashboard.sh
+    ```
+
+2.  **Add to Bash profile:**
+    Append the script to the end of your `~/.bashrc` file to launch it automatically upon TTY login:
+    ```bash
+    echo "./dashboard.sh" >> ~/.bashrc
+    ```
+
+---
 
 ![alt text](screen.png)
 
