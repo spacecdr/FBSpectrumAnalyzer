@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Funzione per pulire lo schermo all'uscita
 trap "clear; exit" SIGINT SIGTERM
 
 while true; do
