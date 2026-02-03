@@ -60,7 +60,9 @@ To turn your computer into a dedicated audio device, you can use the provided `d
 
 ---
 
-![alt text](screen.png)
+<img width="1024" height="600" alt="screen" src="https://github.com/user-attachments/assets/e51d817a-1744-4676-8fbf-d38e8761d995" />
+
+
 
 ## Video
 
