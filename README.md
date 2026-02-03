@@ -39,7 +39,8 @@ This project was developed and tested on:
     ```bash
     ./spectrum
     ```
-
+    
+## ⚙️ Usage
 if you push H key, hours will be shown. +/- increase/decrease font size. Ths S key shows Spotify details. The setting is permanent even after restart.
  
 ---
