@@ -35,14 +35,18 @@ int show_spotify = 0;
 int show_clock = 0;
 int font_scale = 4;
 
+long track_duration = 0;
+long track_progress = 0;
+
 unsigned char font_ascii[128][8] = {
     [32]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, [45]={0x00,0x00,0x00,0x3E,0x00,0x00,0x00,0x00},
-    [46]={0x00,0x00,0x00,0x00,0x00,0x60,0x60,0x00}, [48]={0x3C,0x42,0x42,0x42,0x42,0x42,0x42,0x3C},
-    [49]={0x08,0x18,0x28,0x08,0x08,0x08,0x08,0x3E}, [50]={0x3E,0x42,0x02,0x02,0x3E,0x40,0x40,0x3E},
-    [51]={0x3E,0x02,0x02,0x3E,0x02,0x02,0x02,0x3E}, [52]={0x08,0x18,0x28,0x48,0x7E,0x08,0x08,0x08},
-    [53]={0x7E,0x40,0x40,0x7C,0x02,0x02,0x42,0x3C}, [54]={0x3C,0x40,0x40,0x7C,0x42,0x42,0x42,0x3C},
-    [55]={0x7E,0x02,0x04,0x08,0x10,0x20,0x20,0x20}, [56]={0x3C,0x42,0x42,0x3C,0x42,0x42,0x42,0x3C},
-    [57]={0x3C,0x42,0x42,0x42,0x3E,0x02,0x02,0x3C}, [58]={0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x00},
+    [46]={0x00,0x00,0x00,0x00,0x00,0x60,0x60,0x00}, [47]={0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00}, 
+    [48]={0x3C,0x42,0x42,0x42,0x42,0x42,0x42,0x3C}, [49]={0x08,0x18,0x28,0x08,0x08,0x08,0x08,0x3E}, 
+    [50]={0x3E,0x42,0x02,0x02,0x3E,0x40,0x40,0x3E}, [51]={0x3E,0x02,0x02,0x3E,0x02,0x02,0x02,0x3E}, 
+    [52]={0x08,0x18,0x28,0x48,0x7E,0x08,0x08,0x08}, [53]={0x7E,0x40,0x40,0x7C,0x02,0x02,0x42,0x3C}, 
+    [54]={0x3C,0x40,0x40,0x7C,0x42,0x42,0x42,0x3C}, [55]={0x7E,0x02,0x04,0x08,0x10,0x20,0x20,0x20}, 
+    [56]={0x3C,0x42,0x42,0x3C,0x42,0x42,0x42,0x3C}, [57]={0x3C,0x42,0x42,0x42,0x3E,0x02,0x02,0x3C}, 
+    [58]={0x00,0x18,0x18,0x00,0x00,0x18,0x18,0x00},
     [65]={0x18,0x24,0x42,0x42,0x7E,0x42,0x42,0x42}, [66]={0x7C,0x42,0x42,0x7C,0x42,0x42,0x42,0x7C},
     [67]={0x3C,0x42,0x40,0x40,0x40,0x40,0x42,0x3C}, [68]={0x78,0x44,0x42,0x42,0x42,0x42,0x44,0x78},
     [69]={0x7E,0x40,0x40,0x78,0x40,0x40,0x40,0x7E}, [70]={0x7E,0x40,0x40,0x78,0x40,0x40,0x40,0x40},
@@ -113,6 +117,17 @@ void quick_parse(const char *src, const char *key, char *dest) {
     }
 }
 
+long parse_number(const char *src, const char *key) {
+    char search[128]; sprintf(search, "\"%s\"", key);
+    char *p = strstr(src, search);
+    if (p) {
+        p = strchr(p, ':'); if (!p) return 0;
+        p++; 
+        return atol(p); 
+    }
+    return 0;
+}
+
 void refresh_spotify_token() {
     if (strcmp(CLIENT_ID, "IL_TUO_CLIENT_ID") == 0) return;
     CURL *curl = curl_easy_init();
@@ -142,9 +157,13 @@ void update_spotify_api(char *t, char *a, char *al) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+        
         if(curl_easy_perform(curl) == CURLE_OK && chunk.size > 500 && strstr(chunk.memory, "\"item\"")) {
             spotify_active = 1;
             char *item_ptr = strstr(chunk.memory, "\"item\"");
+            
+            track_progress = parse_number(chunk.memory, "progress_ms");
+            
             char *alb_start = strstr(item_ptr, "\"album\"");
             if (alb_start) {
                 char *first_n = strstr(alb_start, "\"name\"");
@@ -166,10 +185,14 @@ void update_spotify_api(char *t, char *a, char *al) {
                     }
                 }
             }
+            
             char *art_ptr = strstr(item_ptr, "\"artists\"");
             if (art_ptr) quick_parse(art_ptr, "name", a);
-            char *dur_ptr = strstr(item_ptr, "\"duration_ms\"");
-            if (dur_ptr) quick_parse(dur_ptr, "name", t);
+            
+            quick_parse(item_ptr, "name", t);
+            
+            track_duration = parse_number(item_ptr, "duration_ms");
+            
         } else { spotify_active = 0; }
         free(chunk.memory); curl_slist_free_all(headers); curl_easy_cleanup(curl);
     }
@@ -222,6 +245,7 @@ int main() {
     struct pollfd pfd = {0, POLLIN, 0};
     char t[256]="-", a[256]="-", al[256]="-";
     int st=0, tt=0; float hue=0;
+    
     while (1) {
         if (poll(&pfd, 1, 0) > 0) {
             char ch; if (read(0, &ch, 1) > 0) {
@@ -256,16 +280,52 @@ int main() {
         }
         if (tt++ > 4000) { refresh_spotify_token(); tt=0; }
         if (st++ > 150) { update_spotify_api(t, a, al); st=0; }
+        
         if (show_spotify && spotify_active) {
             for (int y=0; y<150; y++) for (int x=0; x<150; x++) {
                 long lo = ((x+20)*bpp)+((y+20)*fi.line_length);
                 int idx = (y*150+x)*3;
                 bb[lo+0]=art_pixels[idx+2]; bb[lo+1]=art_pixels[idx+1]; bb[lo+2]=art_pixels[idx+0];
             }
-            draw_str(bb, 20+150+20, 30, t, vi.xres, vi.yres, fi.line_length, bpp, 2, 255, 255, 255);
-            draw_str(bb, 20+150+20, 65, a, vi.xres, vi.yres, fi.line_length, bpp, 1, 200, 200, 200);
-            draw_str(bb, 20+150+20, 90, al, vi.xres, vi.yres, fi.line_length, bpp, 1, 150, 150, 150);
+            int text_x = 20+150+20;
+            draw_str(bb, text_x, 30, t, vi.xres, vi.yres, fi.line_length, bpp, 2, 255, 255, 255);
+            draw_str(bb, text_x, 65, a, vi.xres, vi.yres, fi.line_length, bpp, 1, 200, 200, 200);
+            draw_str(bb, text_x, 90, al, vi.xres, vi.yres, fi.line_length, bpp, 1, 150, 150, 150);
+
+            if (track_duration > 0) {
+                int cur_sec = track_progress / 1000;
+                int tot_sec = track_duration / 1000;
+                char time_str[32];
+                sprintf(time_str, "%02d:%02d / %02d:%02d", 
+                        cur_sec / 60, cur_sec % 60, 
+                        tot_sec / 60, tot_sec % 60);
+                
+                draw_str(bb, text_x, 115, time_str, vi.xres, vi.yres, fi.line_length, bpp, 1, 180, 180, 180);
+
+                int bar_y = 135;
+                int bar_h = 8;
+                int bar_max_w = 250; 
+                float pct = (float)track_progress / (float)track_duration;
+                if (pct > 1.0) pct = 1.0;
+                int fill_w = (int)(bar_max_w * pct);
+
+                for (int by = 0; by < bar_h; by++) {
+                    for (int bx = 0; bx < bar_max_w; bx++) {
+                        int px = text_x + bx;
+                        int py = bar_y + by;
+                        if (px < vi.xres && py < vi.yres) {
+                            long lo = (px * bpp) + (py * fi.line_length);
+                            if (bx < fill_w) {
+                                bb[lo+0]=255; bb[lo+1]=255; bb[lo+2]=255; 
+                            } else {
+                                bb[lo+0]=50; bb[lo+1]=50; bb[lo+2]=50;
+                            }
+                        }
+                    }
+                }
+            }
         }
+        
         if (show_clock) {
             time_t raw; time(&raw); struct tm *ti = localtime(&raw);
             char clk[10]; sprintf(clk, "%02d:%02d", ti->tm_hour, ti->tm_min);
@@ -274,6 +334,8 @@ int main() {
             draw_str(bb, vi.xres - cw - 20, 20, clk, vi.xres, vi.yres, fi.line_length, bpp, font_scale, r, g, b);
         }
         memcpy(fbp, bb, sz);
+        
+        if (spotify_active && track_duration > 0) track_progress += (1000 * SAMPLES / 44100); 
     }
     return 0;
 }
