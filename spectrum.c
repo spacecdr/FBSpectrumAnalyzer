@@ -202,6 +202,8 @@ void draw_str(unsigned char *buf, int x, int y, const char *s, int xr, int yr, i
 }
 
 int main() {
+    printf("\e[?25l");
+    fflush(stdout);
     load_rc();
     curl_global_init(CURL_GLOBAL_ALL); refresh_spotify_token();
     int fb = open("/dev/fb0", O_RDWR);
