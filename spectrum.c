@@ -13,6 +13,7 @@
 #include <termios.h>
 #include <poll.h>
 #include <curl/curl.h>
+#include <pthread.h>
 
 #define PCM_DEVICE "default"
 #define SAMPLES 2048 
@@ -27,20 +28,23 @@
 #define REFRESH_TOKEN "IL_TUO_REFRESH_TOKEN"
 
 struct termios orig_termios;
-unsigned char art_pixels[ART_SIZE * ART_SIZE * 3];
-char access_token[1024] = "";
+pthread_mutex_t data_lock; 
+unsigned char shared_art_pixels[ART_SIZE * ART_SIZE * 3];
+char shared_t[256]="-", shared_a[256]="-", shared_al[256]="-";
 char last_art_url[512] = "";
-int spotify_active = 0;
+long shared_duration = 0;
+long shared_progress = 0;
+int shared_spotify_active = 0;
+int running = 1;
+
+char access_token[1024] = "";
 int show_spotify = 0;
 int show_clock = 0;
 int font_scale = 4;
 
-long track_duration = 0;
-long track_progress = 0;
-
 unsigned char font_ascii[128][8] = {
     [32]={0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, [45]={0x00,0x00,0x00,0x3E,0x00,0x00,0x00,0x00},
-    [46]={0x00,0x00,0x00,0x00,0x00,0x60,0x60,0x00}, [47]={0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00}, 
+    [46]={0x00,0x00,0x00,0x00,0x00,0x60,0x60,0x00}, [47]={0x00,0x60,0x30,0x18,0x0C,0x06,0x00,0x00},
     [48]={0x3C,0x42,0x42,0x42,0x42,0x42,0x42,0x3C}, [49]={0x08,0x18,0x28,0x08,0x08,0x08,0x08,0x3E}, 
     [50]={0x3E,0x42,0x02,0x02,0x3E,0x40,0x40,0x3E}, [51]={0x3E,0x02,0x02,0x3E,0x02,0x02,0x02,0x3E}, 
     [52]={0x08,0x18,0x28,0x48,0x7E,0x08,0x08,0x08}, [53]={0x7E,0x40,0x40,0x7C,0x02,0x02,0x42,0x3C}, 
@@ -64,18 +68,6 @@ unsigned char font_ascii[128][8] = {
 
 struct MemoryStruct { char *memory; size_t size; };
 
-void save_rc() {
-    FILE *f = fopen(RC_FILE, "w");
-    if (f) { fprintf(f, "show_clock=%d\nshow_spotify=%d\nfont_scale=%d\n", show_clock, show_spotify, font_scale); fclose(f); }
-}
-
-void load_rc() {
-    FILE *f = fopen(RC_FILE, "r");
-    if (!f) return;
-    fscanf(f, "show_clock=%d\nshow_spotify=%d\nfont_scale=%d\n", &show_clock, &show_spotify, &font_scale);
-    fclose(f);
-}
-
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t realsize = size * nmemb;
     struct MemoryStruct *mem = (struct MemoryStruct *)userp;
@@ -87,16 +79,6 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, voi
     mem->memory[mem->size] = 0;
     return realsize;
 }
-
-void set_conio_terminal_mode() {
-    struct termios new_termios;
-    tcgetattr(0, &orig_termios);
-    new_termios = orig_termios;
-    new_termios.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(0, TCSANOW, &new_termios);
-}
-
-void reset_terminal_mode() { tcsetattr(0, TCSANOW, &orig_termios); printf("\e[?25h\n"); }
 
 void quick_parse(const char *src, const char *key, char *dest) {
     char search[128]; sprintf(search, "\"%s\"", key);
@@ -122,14 +104,12 @@ long parse_number(const char *src, const char *key) {
     char *p = strstr(src, search);
     if (p) {
         p = strchr(p, ':'); if (!p) return 0;
-        p++; 
-        return atol(p); 
+        p++; return atol(p);
     }
     return 0;
 }
 
 void refresh_spotify_token() {
-    if (strcmp(CLIENT_ID, "IL_TUO_CLIENT_ID") == 0) return;
     CURL *curl = curl_easy_init();
     if(curl) {
         struct MemoryStruct chunk = {malloc(1), 0};
@@ -143,59 +123,70 @@ void refresh_spotify_token() {
     }
 }
 
-void update_spotify_api(char *t, char *a, char *al) {
-    if (!show_spotify || access_token[0] == '\0' || strcmp(CLIENT_ID, "IL_TUO_CLIENT_ID") == 0) {
-        spotify_active = 0; return;
-    }
-    CURL *curl = curl_easy_init();
-    if(curl) {
-        struct MemoryStruct chunk = {malloc(1), 0};
-        struct curl_slist *headers = NULL;
-        char auth[1100]; sprintf(auth, "Authorization: Bearer %s", access_token);
-        headers = curl_slist_append(headers, auth);
-        curl_easy_setopt(curl, CURLOPT_URL, "https://api.spotify.com/v1/me/player/currently-playing");
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
-        
-        if(curl_easy_perform(curl) == CURLE_OK && chunk.size > 500 && strstr(chunk.memory, "\"item\"")) {
-            spotify_active = 1;
-            char *item_ptr = strstr(chunk.memory, "\"item\"");
+void *spotify_worker_thread(void *arg) {
+    while(running) {
+        if (!show_spotify) { sleep(2); continue; }
+        static int calls = 0;
+        if (calls++ > 900) { refresh_spotify_token(); calls=0; }
+        if (access_token[0] == '\0') refresh_spotify_token();
+
+        CURL *curl = curl_easy_init();
+        if(curl) {
+            struct MemoryStruct chunk = {malloc(1), 0};
+            struct curl_slist *headers = NULL;
+            char auth[1100]; sprintf(auth, "Authorization: Bearer %s", access_token);
+            headers = curl_slist_append(headers, auth);
+            curl_easy_setopt(curl, CURLOPT_URL, "https://api.spotify.com/v1/me/player/currently-playing");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
             
-            track_progress = parse_number(chunk.memory, "progress_ms");
-            
-            char *alb_start = strstr(item_ptr, "\"album\"");
-            if (alb_start) {
-                char *first_n = strstr(alb_start, "\"name\"");
-                if (first_n) {
-                    char *second_n = strstr(first_n + 6, "\"name\"");
-                    if (second_n) quick_parse(second_n - 1, "name", al);
-                    else quick_parse(alb_start, "name", al);
-                }
-                char url[512] = "";
-                char *img_ptr = strstr(alb_start, "\"images\"");
-                if (img_ptr) {
-                    quick_parse(img_ptr, "url", url);
-                    if (url[0] != '\0' && strcmp(url, last_art_url) != 0) {
-                        strcpy(last_art_url, url);
-                        char cmd[1024];
-                        sprintf(cmd, "curl -s %s | ffmpeg -loglevel quiet -y -i pipe:0 -vf scale=%d:%d -f rawvideo -pix_fmt rgb24 pipe:1", url, ART_SIZE, ART_SIZE);
-                        FILE *p = popen(cmd, "r");
-                        if(p) { fread(art_pixels, 1, ART_SIZE*ART_SIZE*3, p); pclose(p); }
+            if(curl_easy_perform(curl) == CURLE_OK && chunk.size > 500 && strstr(chunk.memory, "\"item\"")) {
+                char tmp_t[256]="-", tmp_a[256]="-", tmp_al[256]="-", tmp_url[512]="";
+                long tmp_dur, tmp_prog;
+                unsigned char tmp_art[ART_SIZE * ART_SIZE * 3];
+                int has_new_art = 0;
+
+                char *item_ptr = strstr(chunk.memory, "\"item\"");
+                tmp_prog = parse_number(chunk.memory, "progress_ms");
+                tmp_dur = parse_number(item_ptr, "duration_ms");
+
+                char *art_ptr = strstr(item_ptr, "\"artists\"");
+                if (art_ptr) quick_parse(art_ptr, "name", tmp_a);
+
+                char *alb_ptr = strstr(item_ptr, "\"album\"");
+                if (alb_ptr) {
+                    char *img_ptr = strstr(alb_ptr, "\"images\"");
+                    if (img_ptr) {
+                        quick_parse(img_ptr, "url", tmp_url);
+                        quick_parse(img_ptr, "name", tmp_al);
                     }
                 }
+
+                char *dur_ptr = strstr(item_ptr, "\"duration_ms\"");
+                if (dur_ptr) quick_parse(dur_ptr, "name", tmp_t);
+
+                if (tmp_url[0] != '\0' && strcmp(tmp_url, last_art_url) != 0) {
+                    strcpy(last_art_url, tmp_url);
+                    char cmd[1024];
+                    sprintf(cmd, "curl -s %s | ffmpeg -loglevel quiet -y -i pipe:0 -vf scale=%d:%d -f rawvideo -pix_fmt rgb24 pipe:1", tmp_url, ART_SIZE, ART_SIZE);
+                    FILE *p = popen(cmd, "r");
+                    if(p) { fread(tmp_art, 1, ART_SIZE*ART_SIZE*3, p); pclose(p); has_new_art = 1; }
+                }
+
+                pthread_mutex_lock(&data_lock);
+                strcpy(shared_t, tmp_t); strcpy(shared_a, tmp_a); strcpy(shared_al, tmp_al);
+                shared_duration = tmp_dur; shared_progress = tmp_prog; shared_spotify_active = 1;
+                if (has_new_art) memcpy(shared_art_pixels, tmp_art, ART_SIZE*ART_SIZE*3);
+                pthread_mutex_unlock(&data_lock);
+            } else {
+                pthread_mutex_lock(&data_lock); shared_spotify_active = 0; pthread_mutex_unlock(&data_lock);
             }
-            
-            char *art_ptr = strstr(item_ptr, "\"artists\"");
-            if (art_ptr) quick_parse(art_ptr, "name", a);
-            
-            quick_parse(item_ptr, "name", t);
-            
-            track_duration = parse_number(item_ptr, "duration_ms");
-            
-        } else { spotify_active = 0; }
-        free(chunk.memory); curl_slist_free_all(headers); curl_easy_cleanup(curl);
+            free(chunk.memory); curl_slist_free_all(headers); curl_easy_cleanup(curl);
+        }
+        sleep(2); 
     }
+    return NULL;
 }
 
 void hsv_to_rgb(float h, unsigned char *r, unsigned char *g, unsigned char *b) {
@@ -224,11 +215,18 @@ void draw_str(unsigned char *buf, int x, int y, const char *s, int xr, int yr, i
     }
 }
 
+void set_conio_terminal_mode() {
+    struct termios new_termios; tcgetattr(0, &orig_termios);
+    new_termios = orig_termios; new_termios.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(0, TCSANOW, &new_termios);
+}
+
+void reset_terminal_mode() { tcsetattr(0, TCSANOW, &orig_termios); printf("\e[?25h\n"); }
+
 int main() {
-    printf("\e[?25l");
-    fflush(stdout);
-    load_rc();
-    curl_global_init(CURL_GLOBAL_ALL); refresh_spotify_token();
+    printf("\e[?25l"); fflush(stdout);
+    pthread_mutex_init(&data_lock, NULL);
+    pthread_t tid; pthread_create(&tid, NULL, spotify_worker_thread, NULL);
     int fb = open("/dev/fb0", O_RDWR);
     struct fb_var_screeninfo vi; struct fb_fix_screeninfo fi;
     ioctl(fb, FBIOGET_VSCREENINFO, &vi); ioctl(fb, FBIOGET_FSCREENINFO, &fi);
@@ -243,17 +241,14 @@ int main() {
     fftw_plan fft_p = fftw_plan_dft_r2c_1d(SAMPLES, fft_in, fft_out, FFTW_ESTIMATE);
     set_conio_terminal_mode(); atexit(reset_terminal_mode);
     struct pollfd pfd = {0, POLLIN, 0};
-    char t[256]="-", a[256]="-", al[256]="-";
-    int st=0, tt=0; float hue=0;
+    float hue=0;
     
-    while (1) {
+    while (running) {
         if (poll(&pfd, 1, 0) > 0) {
             char ch; if (read(0, &ch, 1) > 0) {
-                if (ch == 27) break;
-                if (ch == '+') { font_scale++; save_rc(); }
-                if (ch == '-' && font_scale > 1) { font_scale--; save_rc(); }
-                if (ch == 'h' || ch == 'H') { show_clock = !show_clock; save_rc(); }
-                if (ch == 's' || ch == 'S') { show_spotify = !show_spotify; save_rc(); }
+                if (ch == 27) running = 0;
+                if (ch == 'h' || ch == 'H') show_clock = !show_clock;
+                if (ch == 's' || ch == 'S') show_spotify = !show_spotify;
             }
         }
         if (snd_pcm_readi(h, audio_buf, SAMPLES) != SAMPLES) { snd_pcm_prepare(h); continue; }
@@ -278,64 +273,23 @@ int main() {
                 }
             }
         }
-        if (tt++ > 4000) { refresh_spotify_token(); tt=0; }
-        if (st++ > 150) { update_spotify_api(t, a, al); st=0; }
-        
-        if (show_spotify && spotify_active) {
-            for (int y=0; y<150; y++) for (int x=0; x<150; x++) {
-                long lo = ((x+20)*bpp)+((y+20)*fi.line_length);
-                int idx = (y*150+x)*3;
-                bb[lo+0]=art_pixels[idx+2]; bb[lo+1]=art_pixels[idx+1]; bb[lo+2]=art_pixels[idx+0];
+        pthread_mutex_lock(&data_lock);
+        if (show_spotify && shared_spotify_active) {
+            for (int y=0; y<ART_SIZE; y++) for (int x=0; x<ART_SIZE; x++) {
+                long lo = ((x+20)*bpp)+((y+20)*fi.line_length); int idx = (y*ART_SIZE+x)*3;
+                bb[lo+0]=shared_art_pixels[idx+2]; bb[lo+1]=shared_art_pixels[idx+1]; bb[lo+2]=shared_art_pixels[idx+0];
             }
-            int text_x = 20+150+20;
-            draw_str(bb, text_x, 30, t, vi.xres, vi.yres, fi.line_length, bpp, 2, 255, 255, 255);
-            draw_str(bb, text_x, 65, a, vi.xres, vi.yres, fi.line_length, bpp, 1, 200, 200, 200);
-            draw_str(bb, text_x, 90, al, vi.xres, vi.yres, fi.line_length, bpp, 1, 150, 150, 150);
-
-            if (track_duration > 0) {
-                int cur_sec = track_progress / 1000;
-                int tot_sec = track_duration / 1000;
-                char time_str[32];
-                sprintf(time_str, "%02d:%02d / %02d:%02d", 
-                        cur_sec / 60, cur_sec % 60, 
-                        tot_sec / 60, tot_sec % 60);
-                
-                draw_str(bb, text_x, 115, time_str, vi.xres, vi.yres, fi.line_length, bpp, 1, 180, 180, 180);
-
-                int bar_y = 135;
-                int bar_h = 8;
-                int bar_max_w = 250; 
-                float pct = (float)track_progress / (float)track_duration;
-                if (pct > 1.0) pct = 1.0;
-                int fill_w = (int)(bar_max_w * pct);
-
-                for (int by = 0; by < bar_h; by++) {
-                    for (int bx = 0; bx < bar_max_w; bx++) {
-                        int px = text_x + bx;
-                        int py = bar_y + by;
-                        if (px < vi.xres && py < vi.yres) {
-                            long lo = (px * bpp) + (py * fi.line_length);
-                            if (bx < fill_w) {
-                                bb[lo+0]=255; bb[lo+1]=255; bb[lo+2]=255; 
-                            } else {
-                                bb[lo+0]=50; bb[lo+1]=50; bb[lo+2]=50;
-                            }
-                        }
-                    }
-                }
-            }
+            draw_str(bb, 190, 30, shared_t, vi.xres, vi.yres, fi.line_length, bpp, 2, 255, 255, 255);
+            draw_str(bb, 190, 65, shared_a, vi.xres, vi.yres, fi.line_length, bpp, 1, 200, 200, 200);
+            draw_str(bb, 190, 90, shared_al, vi.xres, vi.yres, fi.line_length, bpp, 1, 150, 150, 150);
         }
-        
+        pthread_mutex_unlock(&data_lock);
         if (show_clock) {
-            time_t raw; time(&raw); struct tm *ti = localtime(&raw);
-            char clk[10]; sprintf(clk, "%02d:%02d", ti->tm_hour, ti->tm_min);
+            time_t raw; time(&raw); struct tm *ti = localtime(&raw); char clk[10]; sprintf(clk, "%02d:%02d", ti->tm_hour, ti->tm_min);
             unsigned char r,g,b; hsv_to_rgb(hue, &r, &g, &b); hue+=0.002; if(hue>1) hue=0;
-            int cw = 5 * (8 * font_scale + font_scale); 
-            draw_str(bb, vi.xres - cw - 20, 20, clk, vi.xres, vi.yres, fi.line_length, bpp, font_scale, r, g, b);
+            draw_str(bb, vi.xres - 250, 20, clk, vi.xres, vi.yres, fi.line_length, bpp, font_scale, r, g, b);
         }
         memcpy(fbp, bb, sz);
-        
-        if (spotify_active && track_duration > 0) track_progress += (1000 * SAMPLES / 44100); 
     }
     return 0;
 }
