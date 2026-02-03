@@ -25,13 +25,13 @@ This project was developed and tested on:
 1.  **Install dependencies:**
     ```bash
     sudo apt update
-    sudo apt install shairport-sync build-essential libasound2-dev libfftw3-dev
+    sudo apt install shairport-sync build-essential libasound2-dev libfftw3-dev libcurl4-openssl-dev ffmpeg
     ```
 
 2.  **Compile the source:**
     Use `gcc` to link the ALSA, FFTW3, and Math libraries:
     ```bash
-    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm
+    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm -lcurl
     ```
 
 3.  **Run the analyzer:**
@@ -39,7 +39,7 @@ This project was developed and tested on:
     ./spectrum
     ```
 
-if you push H key, hours will be shown. +/- increase/decrease font size. The setting is permanent even after restart.
+if you push H key, hours will be shown. +/- increase/decrease font size. Ths S key shows Spotify details. The setting is permanent even after restart.
  
 ---
 
