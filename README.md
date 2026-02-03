@@ -2,7 +2,8 @@
 <b>Spectrum Analyzer for Linux FrameBuffer</b>
 </p> 
 
-![alt text](fb.png)
+<img width="1024" height="600" alt="fb" src="https://github.com/user-attachments/assets/205c89f1-e38c-449d-9980-521df8afd3d5" />
+
 
 # 🎹 C Spectrum Analyzer for Linux FrameBuffer
 
