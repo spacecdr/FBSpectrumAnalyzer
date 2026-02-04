@@ -66,6 +66,9 @@ To turn your computer into a dedicated audio device, you can use the provided `d
 ## Video
 
 
-https://github.com/user-attachments/assets/6fcc3913-acc8-4869-be19-fabc4e5d5f10
+https://github.com/user-attachments/assets/0fd9f551-1573-48d1-aa77-9b9a3e577565
+
+
+
 
 
