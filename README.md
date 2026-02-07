@@ -32,7 +32,9 @@ This project was developed and tested on:
 2.  **Compile the source:**
     Use `gcc` to link the ALSA, FFTW3, and Math libraries:
     ```bash
-    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm -lcurl
+    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm -lcurl 
+    or
+    gcc spectrum.c -o spectrum -lasound -lfftw3 -lm -lcurl -lpthread
     ```
 
 3.  **Run the analyzer:**
